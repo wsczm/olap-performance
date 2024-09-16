@@ -23,6 +23,18 @@ In 的数据量少时，可以用 Array 代替 HashSet
 
 ### 两阶段 Streaming 聚合
 
+![two-phase-agg](/two-phase-agg.png)
+
+上图是分布式两阶段聚合，第一个阶段聚合数据都需要进 Hash 表，适合 Group By 列是中低基数的场景
+
+![one-phase-agg](/one-phase-agg.png)
+
+上图是分布式一阶段聚合，Scan的数据直接进行 Shuffle，只聚合一次，适合 Group By 列是高基数的场景
+
+![streaming-agg](/streaming-agg.png)
+
+上图是分布式两阶段聚合 的自适应 Streaming 版本，第一阶段聚合会进行自适应，会先构建一个小的 Hash 表，如何聚合效果不好，后面的数据就不再访问 Hash 表，直接进行 Shuffle
+
 ## Join
 
 ### Hash Join
@@ -55,4 +67,10 @@ In 的数据量少时，可以用 Array 代替 HashSet
 ### Ranking Window 特殊优化
 
 ### Window 谓词下推
+
+## Sketch
+
+### DDSketch
+
+- [DDSketch: A Fast and Fully-Mergeable Quantile Sketch with Relative-Error Guarantees](https://arxiv.org/pdf/1908.10693.pdf)
 

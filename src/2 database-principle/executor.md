@@ -23,6 +23,26 @@ icon: creative
 
 如上图所示，对于SQL Group By City, Platform, 如果 City, Platform 都是低基数字符串，我们就可以将对两个字符串列的 Hash 聚合变为针对两个 Int 列的 Hash 聚合，这样在 Scan, Shuffle，Hash，Equal，Memcpy 等多个重要操作上都会变快很多，我们实测整体查询性能可以有 3 倍的提升。
 
+## 数据库的几种常见执行模式
+
+* Iterator Model: Tuple-at-a-time
+* Materialization Model: Operator-at-a-time
+* Vectorized / Batch Model: Vector-at-a-time
+
+### Iterator Model 的优缺点
+
+优点：
+
+1. 实现简单
+2. 内存占用小
+
+
+缺点：
+
+1. CPU 利用效率太低，CPU的大部分处理时不是用来真正的处理数据，而是在遍历查询操作树。
+
+
+
 ## 最理想的执行模型
 
 - 充分利用多核能力同时处理一个查询
@@ -32,6 +52,9 @@ icon: creative
 ## Push VS Pull
 
 ![push-pull](/push-pull.jpg)
+
+Pull 执行方式是 Top-to-Bottom，从 root 节点开始，从孩子节点 "pull" 数据
+Push 执行方式是 Bottom-to-Top，从 left 节点开始，"push" 数据到父节点
 
 如上图所示，在Push的执行方式中，数据流和控制流方向一致，在Pull的执行方式，数据流和控制流方向相反。
 
@@ -70,10 +93,12 @@ Push 模型中，Producers 驱动整个流程；Pull 模型中，Consumers 驱�
 ### Push 模型的优点
 
 1. 数据流和控制流解耦，每个算子自身不用处理控制逻辑
-2. 高效的支持  DAG 的plan，不只是 Tree 的plan, 可以进行CTE 复用优化 和 Scan Share 优化
+2. 高效的支持 DAG 的plan，不只是 Tree 的plan, 支持多路输出，可以进行CTE 复用优化 和 Scan Share 优化
 3. 可以方便地进行 yield
 4. 对异步IO 更友好，处理 IO 任务时，将对应算子暂停，数据就绪是唤醒对应的算子
 5. 对 Code-gen 模型更友好
+6. Better code and data locality：Data is not pulled by operators but pushed towards
+the operators.
 
 ### Push 模型的缺点
 
@@ -82,6 +107,17 @@ Push 模型中，Producers 驱动整个流程；Pull 模型中，Consumers 驱�
 3. 不好处理 Runtime Filter
 
 ## 向量化执行器
+
+### What is Vectorized Query Engine
+
+向量化执行的核心是批量按列进行处理。
+
+![what-vector-engine](/what-vector-engine.png)
+
+1. Data Use **Column Layout All Time**: Disk, Memory, NetWork
+2. Data should be processed by **batch way** (4096 rows)
+3. Data should be computed by **column formant**, not row formant
+4. Should use **SIMD Instructions** as much as possible
 
 ![starrcoks-vector-1](https://blog.bcmeng.com/post/media/16404977814611/starrcoks-vector-1.png)
 
@@ -141,15 +177,20 @@ Top-down Microarchitecture Analysis Method 的具体内容大家可以参考相�
 
 再对应到之前的 CPU 时间计算公式，我们就可以得出如下结论：
 
-![](/vector.png)
+![vector](/vector.png)
 
-而数据库向量化对以上 4 点都会有提升，后文会有具体解释，至此，本文从原理上解释了为什么向量化可以提升数据库性能。
+而数据库向量化对以上 4 点都会有提升。 主要原因如下，相比于传统的按行解释执行，向量化执行有以下优点：
+
+1. Interpretation 执行的开销更低（批量执行的优点），更少的虚函数调用，更少的分支预测失败
+2. 对 SIMD 执行更加优化 （按列执行的优点）
+3. 对 CPU Cache 更加优化 （经常操作顺序的内存）
+4. 延迟物化：只需要在最后必要的时候将最终需要的列拼成行
 
 ### 算子和表达式向量化的关键点
 
 数据库的向量化在工程上主要体现在算子和表达式的向量化，而算子和表达式的向量化的关键点就一句话：Batch Compute By Column, 如下图所示：
 
-![](/batch-column.png)
+![batch-column](/batch-column.png)
 
 对应 Intel 的 Top-down 分析方法，Batch 优化了 分支预测错误和指令 Cache Miss，By Column 优化了 数据 Cache Miss，并更容易触发 SIMD 指令优化。
 
@@ -193,10 +234,38 @@ Batch 这一点其实比较好做到，难点是对一些重要算子，比如 J
 
 ![starrocks-prefetch](/starrocks-prefetch.png)
 
+### 向量化执行的缺点
+
+向量化执行相比按行执行的缺点如下：
+
+1. 更多的内存占用
+2. 内存更容易成为瓶颈，从而抵消向量化的好处
+3. 对 UDF 不友好
+
 ## Pipeline 多核执行
 
+### What's pipeline
+
+![what-pipeline](/what-pipeline.png)
+
+**Pipeline means that an operator can pass data to its parent operator without copying or otherwise materializing the data.**
+
+Inside one pipeline, there is no data materialize, Fragment decomposes into pipelines;  Pipeline contains multi operators
+
+![pipeline-operator](/pipeline-operator.png)
+
+A pipeline is a chain consists of operators:
+
+- First operator is source operator,  has only one output.
+- Last operator is sink operator, has only one input.
+- Operators excluding source/sink operators has only one input and one output.
+- Operators except sink operator works in the chunk-at-a-time fashion.
+- For two adjacent operators, chunk is produced by the preceding, consumed by the following
+
+### Pipeline 引擎的关键点
+
 - Yield
-- 用户空间
+- 从内核态调度到用户态调度
 - Morsel-Driven
 - Task-Queue
 - Operator asynchronzation
@@ -204,7 +273,7 @@ Batch 这一点其实比较好做到，难点是对一些重要算子，比如 J
 
 ![pipeline-task](/pipeline-task.png)
 
-Operator 的状态
+### Operator 的状态
 
 - Ready
 - Running
@@ -212,12 +281,13 @@ Operator 的状态
 
 ![pipeline-status](/pipeline-status.png)
 
-
 ## MPP 多机执行
 
 MPP 是大规模并行计算的简称，核心做法是将查询 Plan 拆分成很多可在单个节点上执行的计算实例，然后多个节点并行执行。每个节点不共享 CPU、内存、磁盘资源。MPP 数据库的查询性能可以随着集群的水平扩展而不断提升。
 
 ![mpp-fragment](/mpp-fragment.png)
+
+![mpp-fragment](/mpp-fragment-2.png)
 
 如上图 所示，StarRocks 会将一个查询在逻辑上切分为多个 Query Fragment（查询片段），每个 Query Fragment 可以有一个或者多个 Fragment 执行实例，每个 Fragment 执行实例会被调度到集群某个 BE 上执行。一个 Fragment 可以包括一个或者多个 Operator（执行算子），图中的 Fragment 包括了Scan、Filter、Aggregate。每个 Fragment 可以有不同的并行度。
 
@@ -225,8 +295,84 @@ MPP 是大规模并行计算的简称，核心做法是将查询 Plan 拆分成�
 
 如上图 所示，多个 Fragment 之间会以 Pipeline 的方式在内存中并行执行，而不是像批处理引擎那样 Stage By Stage 执行。Shuffle （数据重分布）操作是 MPP 数据库查询性能可以随着集群的水平扩展而不断提升的关键，也是实现高基数聚合和大表 Join 的关键。
 
+### MPP VS Scatter-Gather VS Stage By Stage
+
+![mpp-stage-scater-gather](/mpp-stage-scater-gather.png)
+
+### MPP Scale Out
+
+![mpp-scale-out](/mpp-scale-out.png)
 
 ## 查询编译
+
+### 编译什么
+
+1. 表达式计算
+2. Schema 解析，在提前知道Schema的情况下，可以对代码进行特化，就可以减少很多分支判断
+3. 多列Sort，多列聚合等算子粒度的编译执行
+4. 编译整个查询 Plan：针对整个查询 Plan 编译生成的代码都是紧凑的for循环，可以充分利用 CPU 的寄存器和 Cache，大幅提升效率
+
+![jit-level](/jit-level.png)
+
+### 如何编译
+
+#### Transpilation
+
+Write code that converts a relational query plan into
+imperative language source code and then run it through a
+conventional compiler to generate native code.
+
+#### JIT Compilation
+
+Generate an intermediate representation (IR) of the query
+that the DBMS then compiles into native code .
+
+1. Machine code
+2. Virtual Machine bytecode:《Compiled Query Execution Engine using JVM》
+3. C++
+4. SQL Virtual Machine:数据库中自己实现一个VM
+5. LLVM IR: LLVM supports a wide variety of optimizations on the IR code like function inlining, loop vectorization and instruction combining. Further, it supports the addition of custom optimization passes.
+
+#### 基于 Push 模型的 Code Gen 示意
+
+In a push-based model, child operators produce and push tuples to their parents, requesting them to consume the tuples.
+
+Conceptually each operator offers two functions:
+
+• produce()
+• consume(attributes, source)
+
+**produce/consume interface 主要是为了进行代码生成，在生成的实际执行代码中并不存在。**
+
+Codegen动图： <https://ericfu.me/images/2019/03/code-gen-demo-animated.gif>
+
+#### Operator Fusion
+
+将多个算子的执行放到一个紧凑的循环里：
+
+![Operator-fusion](/operator-fusion.png)
+
+优点：避免了将数据物化到内存，可以让数据尽可能常驻 CPU 寄存器和 CPU Cache 中，进而显著提升执行效率
+
+缺点：tuple one time 导致无法利用 SIMD
+
+### 查询编译的优点
+
+**在已知表结构的情况下，手写的代码一般是最优的代码。**
+
+手写 SQL 高效的原因如下：
+
+1. No virtual function dispatches
+2. Intermediate data in CPU registers vs in memory
+3. Loop unrolling and SIMD
+
+编译生成的代码更高效的一个重要原因还有，在通用执行引擎里面的很多“**变量**”，编译后都变成了 “**常量**”。 **我们在知道用户的 SQL 的之后再 “coding”，会少很多条件判断，少很多无关代码，效率自然会高很多。**
+
+### 查询编译的缺点
+
+1. 编译耗时可能很长，越复杂的查询，编译时间越长
+2. 对 Debug 很不友好
+
 
 ### 优化点
 
@@ -236,5 +382,34 @@ MPP 是大规模并行计算的简称，核心做法是将查询 Plan 拆分成�
 
 ## 向量化 VS 查询编译
 
+* 两者整体的性能基本持平
 * Data-centric is better for "calculation-heavy" queries with few cache misses
 * Vectorization is slightly better at hiding cache miss latencies
+
+详情参看[Everything You Always Wanted to Know About Compiled and Vectorized Queries But Were Afraid to Ask](https://www.vldb.org/pvldb/vol11/p2209-kersten.pdf) 10 SUMMARY 部分
+
+
+## Relaxed Operator Fusion
+
+### Why Relaxed Operator Fusion
+
+因为查询编译一般是tuple one time, 无法利用到 Vectorized 和 Prefetching 的优点。RELAXED OPERATOR FUSION 就是想同时利用到 Compilation，Vectorized 和 Prefetching 的优点。
+
+### How Relaxed Operator Fusion
+
+为了在支持 Compilation 的同时，支持 Vectorized 和 Prefetching，就需要引入vector，所以ROF引入了 Stage 的概念，可以将一个Pipeline拆分成多个 Stage，通过stage 引入 Vector后，就可以支持 Vectorized 和 Prefetching。 如下图所示：
+
+![Relaxed Operator Fusion](/rof.png)
+
+一些关键点：
+
+1. 利用 Prefetch 避免 Hash Join 大量随机访问导致的 CPU Stall
+2. 查询 Plan 时决定是否启用 SIMD predicate evaluation，是否启用 prefetching
+3. 如果一个operators里包含需要随机访问且大小超过cache size的数据结构，planner就会插入一个stage，来启用prefetching。
+4. Prefetch 和 SIMD vectorization 都需要一次可以处理多行数据
+5. SIMD vector instructions require that data be packed together contiguously
+6. Prefetch 不需要数据的地址连续
+7. In order to successfully hide cache miss latency with prefetching, the software must prefetch a number of tuples ahead (to overlap the cache miss with the processing of other tuples)
+8. Software prefetch instructions can move blocks of data from memory into the CPU caches before they are needed, thereby hiding the latency of expensive cache misses
+
+

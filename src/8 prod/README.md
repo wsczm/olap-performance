@@ -39,8 +39,18 @@ GROUP BY day
 
 查询，导入，Compaction, Schema Change, 统计信息收集，数据均衡 等多种任务资源相互影响
 
+![资源隔离](https://pic1.zhimg.com/80/v2-190c4c06966f0c5ce8bf92376d018b28_1440w.webp)
+
 ## 并发控制
 
 ## 大查询
 
 ## 查询重试策略
+
+## 防止 OOM
+
+### Spill To Disk
+
+### Grouped Execution
+
+### Stage By Stage

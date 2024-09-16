@@ -45,6 +45,14 @@ icon: creative
 
 <https://github.com/brendangregg/perf-tools>
 
+## iodlr Tools and Reference Code for Intel Optimizations (eg Large Pages)
+
+<https://github.com/intel/iodlr>
+
+## nanoBench
+
+<https://github.com/andreas-abel/nanoBench>
+
 ## Latencytop
 
 可以测试出内核态和用户态导致系统延迟的原因
@@ -154,6 +162,14 @@ Utilities to measure read access times of caches, memory, and hardware prefetche
 ```
 mysqlslap -u root --password=xxx -h 127.0.0.1 -P 888  0 -c 1 -i 1 --create-schema=test --query="sql-groupby-string-string_int_int";
 ```
+
+### Locust
+
+mysqlslap 不适合高并发压测，当进行高并发压测时，可以使用 Locust。
+
+Locust 支持分布式压测，统计指标更完善，支持压测结果可视化，支持 Python 脚本编写压测用例。
+
+https://locust.io/
 
 ### Jmeter
 

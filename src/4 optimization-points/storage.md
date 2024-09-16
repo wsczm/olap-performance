@@ -5,6 +5,16 @@ icon: creative
 
 ## 列存
 
+![StarRocks Segment File](https://miro.medium.com/v2/resize:fit:1400/format:webp/1*1HKGBMWthEkOqbt2VbhvVA.png)
+
+- 高效IO: 只读取必需的列
+- 高效编码压缩:同一列的数据类型相同，数据特点相似，压缩比更高
+- 丰富索引加速过滤
+
+### 半结构化列存
+
+[Json 自动列存]( <https://mp.weixin.qq.com/s/MH5rrG3Pm0Qt2xE8hT0glw>)
+
 ## 索引
 
 ### Hash 索引
@@ -19,11 +29,23 @@ icon: creative
 
 ![Predix Index Rationale ](https://blog.bcmeng.com/post/media/16856655073291/Predix%20Index%20Rationale%20.png)
 
+- 基于排序列
+- 索引粒度：几千行
+- 索引 Key: 一般有字节数的限制
+
 ### ZoneMap 索引 （块索引）
 
 块级索引，是以块为单位，记录块内元数据的索引（最大值、最小值、空值、COUTN、SUM、相关性等）
 
+### Z-Order 索引
+
+### Liquid Clustering
+
+[Databricks Liquid Clustering 原理](https://blog.bcmeng.com/post/liquid-clustering.html)
+
 ### BloomFilter 索引
+
+过滤条件是 = 和 In
 
 ### Bitmap 倒排索引
 
@@ -82,6 +104,15 @@ TencentCLS: The Cloud Log Service with High Query Performances <https://www.vldb
 vm.dirty_background_ratio
 vm.dirty_expire_centisecs
 
+
+## IO 线程和计算线程解耦
+
+![Scan-IO-async](/scan-io-async.png)
+
+- Submit an asynchronous io tasks
+- Fetch and cache chunk into chunk buffer
+- Pull the chunk from the chunk buffer
+
 ## 异步 IO
 
 IO异步化对于高性能的网络编程、服务器应用程序、多线程和多进程编程等场景非常有用，可以避免因IO阻塞而导致的资源浪费和性能瓶颈。它允许程序更加高效地利用计算资源，并提高系统的并发能力和响应性能。
@@ -93,24 +124,14 @@ IO异步化对于高性能的网络编程、服务器应用程序、多线程和
 ## IO 多路复用
 
 
-## Zero Copy
-
-![](https://miro.medium.com/v2/resize:fit:1400/format:webp/1*9BzxNcdOAGP1FmhOb2PSXQ.png)
-
-Linux sendfile:
-
-```
-ssize_t sendfile(
-  int out_fd,
-  int in_fd,
-  off_t *offset,
-  size_t count
-  );
-```
-
 ## IO 多路复用
 
 ## IO 并行度 自适应
+
+![adaptive-io-concurrent](/adaptive-io-concurrent.png)
+
+- Should control the memory usage of the Scan IO Tasks
+- Adjust the IO concurrent by memory limit and heuristic chunk bytes
 
 ## IO 调度
 
@@ -120,7 +141,18 @@ ssize_t sendfile(
 
 ## Shared Scan
 
+![Shared-Scan](/shared-scan.png)
+
+- Share the chunk buffer between scan operators
+- Balance data among scan operators
+- Resolve the  natural tablet data skew
+
 ## 延迟物化
+
+![late-Materialization](/late-Materialization.png)
+
+1. 先只读取过滤条件中的列
+2. 再根据过滤后的行号读取其他的列
 
 ## Segment 大小 / 文件大小
 
@@ -162,6 +194,10 @@ ssize_t sendfile(
 
 ## Compaction
 
+![compaction](http://static.zybuluo.com/kangkaisen/p4j5rfid7uzryuwb049upg27/%E5%B1%8F%E5%B9%95%E5%BF%AB%E7%85%A7%202018-01-28%20%E4%B8%8B%E5%8D%885.11.49.png)
+
+Compaction 如果不及时，会导致文件数过多，进而影响查询性能
+
 ## Prefetch or Predictive Pipelining
 
 根据访问模式，提前从存储层读取所需要的数据。
@@ -171,6 +207,10 @@ ssize_t sendfile(
 [Announcing the General Availability of Predictive I/O for Reads](https://www.databricks.com/blog/announcing-general-availability-predictive-io-reads.html)
 
 ## 硬件
+
+### 多块磁盘
+
+在成本相差不大的情况下，多块磁盘可以获得更高 IOPS 和吞吐
 
 ### NVMe
 

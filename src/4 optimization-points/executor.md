@@ -22,11 +22,26 @@ icon: creative
 
 ## 列式布局
 
+![memory-column](/memory-clolumn.png)
+
 ## Batch 操作
 
 ## 按列处理
 
+![vector-operato-expression](/vector-operato-expression.png)
+
+![vector-operator](/vector-operator.png)
+
+![vector-expression](/vector-expression.png)
+
+- 更少的虚函数调用
+- 更少的分支判断
+- CPU Cache 更友好
+- 易于SIMD优化
+
 ### Shuffle By Column
+
+![shuffle-by-column](/shuffle-by-column.png)
 
 ## 虚函数调用
 
@@ -49,6 +64,8 @@ icon: creative
 <https://stackoverflow.com/questions/17095324/fastest-way-to-determine-if-an-integer-is-between-two-integers-inclusive-with>
 
 ## Chunk Size
+
+![vector-chunk-size](/vector-chunk-size.png)
 
 ## Query Cache
 
@@ -74,6 +91,14 @@ pack data，尽可能 touch 足够小的内存
 ### Block
 
 ### Prefetch
+
+#### Hardware Prefetch
+
+![hardware-prefetch](/hardware-prefetch.png)
+
+#### Software Prefetch
+
+![starrocks-prefetch](/starrocks-prefetch.png)
 
 ### Code Cache
 
@@ -114,7 +139,34 @@ Pointer-chasing（指针追踪）是指在计算过程中频繁地通过指针�
 
 ## Runtime Filter
 
+### What Is Runtime Filter
+
+![what-runtime-filter](/what-runtime-filter.png)
+
+### Runtime Filter 的意义
+
+- Reduce Scan Disk IO
+- Reduce Network Transport
+- Reduce Join Probe Rows
+
+越复杂的 Join SQL，数据量越大的数据集，Runtime Filter 的优化意义越大， Runtime Filter 带来 10倍到 100倍的性能提升。 10 倍到 100倍 是 StarRocks 真实用户生产环境的数据。
+
+### Runtime Filter 的优化点
+
+- Support Local And Global Runtime Filter
+- Shuffle Aware
+- Push down Max/Min, In Filter To Storage Engine
+- Cost Estimation Based
+- Support Runtime Filter Cache
+- Push Runtime Filter To Two Sides
+- SIMD Bloom Filter
+- Adaptive Join Runtime Filters Selection
+- Multi Column Runtime Filter
+- 只下推有选择性的 Runtime Filer
+
 ### Local Join Runtime Filter
+
+![join-runtime-filter](/join-runtime-filter.png)
 
 ### Global Join Runtime Filter
 
@@ -134,7 +186,13 @@ Pointer-chasing（指针追踪）是指在计算过程中频繁地通过指针�
 
 ## 网络传输
 
-## 内存管理
+## 提前短路
+
+### Hash Join 提前短路
+
+### Limit 提前短路
+
+## 内存管理 Memory Management
 
 ### 避免 Copy
 
@@ -154,11 +212,19 @@ Pointer-chasing（指针追踪）是指在计算过程中频繁地通过指针�
 - Unaligned store instructions that straddle a page boundary are substantially slower (taking about 4x as long to execute).
 - Unaligned store instructions that do not straddle either of these boundaries are almost free on modern CPU’s
 
+### Column Pool
+
+![column-pool](/column-pool.png)
+
 ## 线程模型
 
 ## 序列化
 
 ## Operations on Encoded Data
+
+![operator-encode-1](/operator-encode-1.png)
+
+![operator-encode-2](/operator-encode-2.png)
 
 <https://archived.docs.singlestore.com/v7.0/concepts/understanding-ops-on-encoded-data/>
 
@@ -213,6 +279,8 @@ Link Order Changes function addresses
 
 ### Adaptive Join Runtime Filters Selection
 
+![adaptive-join-runtime-filter](/adaptive-join-runtime-filter.png)
+
 ### Adaptive Streaming Aggregate
 
 ### Adaptive Aggregate Hash Map Selection
@@ -224,6 +292,13 @@ Link Order Changes function addresses
 ### Adaptive Encoding
 
 ### Adaptive Pipeline Parallelism
+
+- BE CPU Core Number
+- Query Type
+- Data Size
+- Operator Type
+- Data Distribution
+- Statistical Information
 
 ### 资料
 

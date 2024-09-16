@@ -25,6 +25,10 @@ StarRocks 对 Nullable 的优化主要体现在下面几点：
 
 ### In Memory MetaData
 
+![in-memory-metadata](/in-memory-metadata.png)
+
+### Memory Cache
+
 ### 利用元数据加速查询
 
 - 全表 Count, Sum, Max, Min 的聚合查询可以直接从元数据查询 <https://github.com/StarRocks/starrocks/pull/15542>
@@ -37,6 +41,17 @@ StarRocks 对 Nullable 的优化主要体现在下面几点：
 - Big Metadata: When Metadata is Big Data <http://vldb.org/pvldb/vol14/p3083-edara.pdf>
 
 ## 分区分桶裁剪
+
+### 分区裁剪
+
+![Partition Pruning](https://miro.medium.com/v2/resize:fit:1400/format:webp/1*p7NxGw03IipP1nmiEd-FeA.png)
+
+### 分桶裁剪
+
+![Bucket Pruning](https://miro.medium.com/v2/resize:fit:1400/format:webp/1*DQkZG1usDpfoZvvmn2PXZw.png)
+
+- 谓词触发分桶裁剪
+- Limit 触发分桶裁剪
 
 ## 常见的RBO 优化
 
@@ -55,6 +70,8 @@ StarRocks 对 Nullable 的优化主要体现在下面几点：
 确保任何多余的列不要参与网络传输
 
 ### 谓词下推
+
+![predicate-push-down](/predicate-push-down.png)
 
 ### 等价谓词推导（常量传播）
 
@@ -84,6 +101,12 @@ StarRocks 对 Nullable 的优化主要体现在下面几点：
 
 <http://mysql.taobao.org/monthly/2023/01/01/>
 
+<https://mp.weixin.qq.com/s/-VNQRyZflHC6yTMbjL1XDA>
+
+### TOPN Push down Outer Join
+
+https://github.com/StarRocks/starrocks/pull/30128
+
 ### 聚合算子复用
 
 比如对于下面的 SQL:
@@ -106,7 +129,11 @@ SELECT AVG(x), SUM(x) FROM table
 
 ### Join 左右表 Reorder
 
+![reorder-join-two.](/reorder-two.png)
+
 ### Join 多表 Reorder
+
+![reorder-join-multi](/reorder-multi.png)
 
 ### Join 分布式执行选择
 
@@ -117,6 +144,8 @@ SELECT AVG(x), SUM(x) FROM table
 #### Bucket Shuffle Join
 
 #### Colocate Join
+
+![colocate-join](https://blog.bcmeng.com/post/media/16809257712677/colocate%20join.png)
 
 #### Replication Join
 
@@ -140,6 +169,10 @@ SELECT AVG(x), SUM(x) FROM table
 
 ### 利用基数信息进行优化
 
+### Join 消除
+
+<https://mp.weixin.qq.com/s/bwYNNBmMAWFgJbJeUAwGnQ>
+
 ## 统计信息
 
 ### 统计信息的收集方式
@@ -147,4 +180,14 @@ SELECT AVG(x), SUM(x) FROM table
 ### 统计信息的收集频率
 
 ### 统计信息 Cache
+
+## 优化器本身耗时的优化点
+
+- Multi-Stage Optimization
+- 按需 Explore group
+- Upper bounds Pruning
+- Memorize
+- Multi Join Reorder
+- Top-Down + Bottom Up Property Enforce
+- Support Physical Plan Rewrite After Cascades
 
